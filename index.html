@@ -352,6 +352,39 @@ function unavailable(key){
   if (key === "conversion" && !KEY_EVENTS) return {value:"Not configured", note:m.na};
   if (m.group === "web" && WEB_GAP && activePeriod().from >= WEB_GAP)
     return {value:"—", note:`No analytics recorded from ${WEB_GAP} onward — see the note above.`};
+  if (m.group === "web"){
+    const p = activePeriod();
+    if (untrackedDays(p.from, p.to) === p.elapsed)
+      return {value:"—", note:`Not tracked — ${gapText()}.`};
+  }
+  return null;
+}
+
+/* Closed analytics blackouts, from annotations.json entries with scope "web"
+   and an "until" date. Zeros inside them are missing measurement, so a total
+   that includes them is an undercount and a comparison across them is
+   meaningless — +1,605% for a month measured against one with six dark days. */
+let TRACKING_GAPS = [];
+function untrackedDays(from, to){
+  let n = 0;
+  for (const g of TRACKING_GAPS){
+    const a = from > g.from ? from : g.from, z = to < g.to ? to : g.to;
+    if (a <= z) n += Math.round((parse(z) - parse(a)) / 864e5) + 1;
+  }
+  return n;
+}
+const gapText = () => "the analytics tag was missing from the site " +
+  TRACKING_GAPS.map(g => `${g.from} to ${g.to}`).join(" and ");
+
+/* Replaces the comparison under a web figure when either period contains
+   untracked days. Returns null when both periods were fully measured. */
+function gapIndicator(key){
+  if (METRICS[key].group !== "web") return null;
+  const p = activePeriod();
+  const cur = untrackedDays(p.from, p.to), prev = untrackedDays(p.prevFrom, p.prevTo);
+  const days = n => `${n} day${n===1?"":"s"}`;
+  if (cur) return `<span>${days(cur)} of ${p.elapsed} not tracked, so this is an undercount — no comparison shown</span>`;
+  if (prev) return `<span>no comparison — the prior period has ${days(prev)} with no tracking</span>`;
   return null;
 }
 
@@ -701,8 +734,9 @@ function renderCards(){
     const indicator =
       na ? `<span>${na.note}</span>` :
       !basis ? `<span>${m.zero || "Not recorded in this range"}</span>` :
-      m.growth ? growthHTML(cur, key) :
-      deltaHTML(c, p, key);
+      gapIndicator(key) ??
+      (m.growth ? growthHTML(cur, key) :
+      deltaHTML(c, p, key));
 
     const bench = (!na && basis && c != null && m.benchmark != null)
       ? `<div class="note">${c >= m.benchmark ? "▲ above" : "▼ below"} ${m.benchmarkLabel}</div>`
@@ -737,7 +771,7 @@ function renderHeadline(){
     el.innerHTML =
       `<div class="label">${m.short ?? m.label}</div>
        <div class="value">${na ? na.value : fmtVal(c, key)}</div>
-       <div class="delta">${na ? na.note : c == null ? "&nbsp;" : deltaHTML(c, p, key)}</div>`;
+       <div class="delta">${na ? na.note : c == null ? "&nbsp;" : gapIndicator(key) ?? deltaHTML(c, p, key)}</div>`;
     host.appendChild(el);
   }
 }
@@ -827,6 +861,12 @@ function renderFlags(){
     const ann = ANNOTATIONS.filter(a => a.scope === "web").map(a => a.detail).join(" ");
     web.innerHTML = `<div class="flag"><b>No analytics data recorded since ${WEB_GAP}.</b>
       ${ann || "Zeros after this date are missing measurement, not lost traffic."}</div>`;
+  } else {
+    const p = activePeriod();
+    const cur = untrackedDays(p.from, p.to), prev = untrackedDays(p.prevFrom, p.prevTo);
+    if (cur || prev)
+      web.innerHTML = `<div class="flag"><b>${cur ? "This period" : "The comparison period"} overlaps
+        the analytics gap.</b> ${ANNOTATIONS.find(a => a.scope === "web" && a.until)?.detail ?? ""}</div>`;
   }
 
   const sends = periodRows().filter(r => (r.emails_delivered ?? 0) > 0);
@@ -870,10 +910,16 @@ function renderChart(){
   $("chartNotes").innerHTML = "";
   if (!buckets.length){ host.innerHTML = `<div class="empty">No data in this range. Widen the dates.</div>`; return; }
   const m = METRICS[metric];
-  const vals = buckets.map(b => readMetric(b, metric));
+  /* Untracked days per bucket. A bucket that is entirely untracked has no
+     value at all; one that is partly untracked is drawn but says so. */
+  const dark = buckets.map(b => m.group === "web"
+    ? untrackedDays(b.rows[0].date, b.rows[b.rows.length-1].date) : 0);
+  const vals = buckets.map((b,i) => dark[i] === b.rows.length ? null : readMetric(b, metric));
+  const tip = (i) => dark[i] ? ` (${dark[i]} of ${buckets[i].rows.length} days not tracked)` : "";
   const shown = vals.filter(v => v != null);
   if (!shown.length){
-    host.innerHTML = `<div class="empty">${m.zero || "No " + m.label.toLowerCase() + " recorded in this range."}</div>`;
+    host.innerHTML = `<div class="empty">${dark.some(Boolean) ? "Not tracked in this range — " + gapText() + "."
+      : m.zero || "No " + m.label.toLowerCase() + " recorded in this range."}</div>`;
     return;
   }
   const asBars = (m.kind === "sum" || m.kind === "stock");
@@ -905,7 +951,7 @@ function renderChart(){
       const top = Math.min(y(v), y(0)), h = Math.abs(y(v)-y(0));
       return `<rect class="bar" x="${(cx(i)-bw*0.32).toFixed(1)}" y="${top.toFixed(1)}" width="${(bw*0.64).toFixed(1)}"
         height="${Math.max(h,1).toFixed(1)}" rx="2" fill="var(${m.color})" opacity=".85">
-        <title>${bucketLabel(b.key)} · ${fmtVal(v,metric)}</title></rect>`;
+        <title>${bucketLabel(b.key)} · ${fmtVal(v,metric)}${tip(i)}</title></rect>`;
     }).join("");
   } else {
     // Break the line at gaps instead of interpolating across them — a
@@ -921,7 +967,7 @@ function renderChart(){
       stroke-linejoin="round" stroke-linecap="round"/>` +
       buckets.map((b,i)=> vals[i]==null ? "" :
         `<circle class="pt" cx="${cx(i).toFixed(1)}" cy="${y(vals[i]).toFixed(1)}" r="${n>60?1.6:3}"
-          fill="var(${m.color})"><title>${bucketLabel(b.key)} · ${fmtVal(vals[i],metric)}</title></circle>`).join("");
+          fill="var(${m.color})"><title>${bucketLabel(b.key)} · ${fmtVal(vals[i],metric)}${tip(i)}</title></circle>`).join("");
   }
 
   /* Event markers. Without them the March cliff in web traffic looks like a
@@ -1070,6 +1116,8 @@ function showMessage(title, body){
       if (Array.isArray(a)) ANNOTATIONS = a.filter(x => x && x.date).sort((x,y)=> x.date < y.date ? -1 : 1);
     }
   } catch (e){}
+  TRACKING_GAPS = ANNOTATIONS.filter(a => a.scope === "web" && a.until)
+    .map(a => ({from:a.date, to:a.until}));
 
   project();
   const last = ROWS[ROWS.length-1].date;
