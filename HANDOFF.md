@@ -106,9 +106,11 @@ Two things that will eventually bite:
 - **Reach is a sum of per-post reach**, not unique people. Someone who saw
   twelve posts counts twelve times. Labelled as such in the UI; don't quote it
   as audience size.
-- **Analytics gap, 2026-03-30 to 2026-08-07.** The site relaunched without the
-  GA4 tag. Those zeros are missing measurement, not lost traffic — recorded in
-  `annotations.json` and flagged in the UI.
+- **Analytics gap, 2026-02-25 to 2026-08-06** (restored 2026-08-07). The GA4
+  tracking code was missing from the live site. Those zeros are missing
+  measurement, not lost traffic. The gap is recorded in `annotations.json` with
+  an `until` date, and the dashboard treats any day inside it as untracked:
+  no zero bars, no comparisons across it.
 
 ## If you're picking this up in a new Claude session
 
