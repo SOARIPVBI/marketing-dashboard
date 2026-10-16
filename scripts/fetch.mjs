@@ -402,7 +402,7 @@ export async function fetchMailchimp(from, to) {
  * raw file. The service account's client_email needs Viewer on the property
  * (GA UI -> Admin -> Property Access Management).
  * ================================================================== */
-async function googleAccessToken() {
+export async function googleAccessToken() {
   const creds = JSON.parse(
     Buffer.from(env("GA4_SERVICE_ACCOUNT"), "base64").toString("utf8")
   );
