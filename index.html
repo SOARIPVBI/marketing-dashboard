@@ -250,7 +250,7 @@
 
    { "date":"2026-07-30",
      "views":0, "reach":0, "reactions":0, "comments":0, "shares":0,
-     "reach_engagements":0,
+     "reach_engagements":0, "posts":0,
      "sessions":0, "pageviews":0, "conversions":0,
      "followers":null, "subscribers":null,
      "emails_delivered":0, "emails_opened":0, "emails_clicked":0 }
@@ -264,7 +264,7 @@
    so dividing all-channel engagements by two-channel reach overstates
    the rate by ~24%. This field is the denominator-matched numerator.
 
-   Rows also carry by_channel — the same six Buffer counts split per
+   Rows also carry by_channel — the same seven Buffer counts split per
    network — which drives the channel filter:
 
      "by_channel": { "instagram": {"views":0,"reach":0,...}, "facebook": {...} }
@@ -273,7 +273,7 @@
    so a filtered view and the unfiltered view always reconcile.
    ============================================================ */
 
-const COUNTS = ["views","reach","reactions","comments","shares","reach_engagements",
+const COUNTS = ["views","reach","reactions","comments","shares","reach_engagements","posts",
   "sessions","pageviews","conversions","emails_delivered","emails_opened","emails_clicked"];
 const LEVELS = ["followers_bluesky","followers_instagram","followers_facebook","subscribers"];
 
@@ -358,7 +358,7 @@ function unavailable(key){
 /* Buffer's per-channel counts, and which follower level belongs to which
    channel. LinkedIn has none — its follower count needs Marketing Developer
    Platform approval, so filtering to LinkedIn correctly shows no level. */
-const CHANNEL_COUNTS = ["views","reach","reactions","comments","shares","reach_engagements"];
+const CHANNEL_COUNTS = ["views","reach","reactions","comments","shares","reach_engagements","posts"];
 const CHANNEL_FOLLOWERS = {
   instagram:"followers_instagram", facebook:"followers_facebook",
   bluesky:"followers_bluesky", linkedin:null,
